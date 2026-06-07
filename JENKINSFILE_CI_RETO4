@@ -1,0 +1,92 @@
+pipeline {
+        agent any
+    stages {
+        stage('Clean') {
+            steps {
+                cleanWs()
+            }
+        }
+        stage('Get Code') {
+            steps {
+                // Get some code from a GitHub repository
+                sh """
+                   git clone -b develop  https://github.com/JavierCM-92/UNIR-CP1.4.git
+                 """
+               
+            }
+        }
+        stage('Static Test') {
+            steps {
+                // Get some code from a GitHub repository
+                sh """
+                   PYTHONPATH=.
+                   cd UNIR-CP1.4/
+                   ls
+                 """
+                    // FLAKE8
+                 sh """
+                 python3 -m flake8 --exit-zero --format=pylint src/ > flake8.out
+                 """
+                 recordIssues tools:[flake8(name: 'Flake8', pattern: 'flake8.out')],
+                 qualityGates: [[integerThreshold: 8, threshold: 8.0, type: 'TOTAL', unstable: true], [integerThreshold: 10, threshold: 10.0, type: 'TOTAL', unstable:false]]
+                   
+                 // BANDIT
+                 sh """
+                  python3 -m bandit -r . -f custom -o bandit.out --msg-template '{abspath}:{line}: [{test_id}] {msg}'
+                 """
+                 recordIssues tools:[pyLint(name:'Bandit', pattern: 'bandit.out')],
+                 qualityGates: [[threshold: 1, type: 'TOTAL', unstable: true], [threshold: 2, type: 'TOTAL', unstable:false]]
+                          
+            }
+        }
+         stage('Deploy') {
+            steps {
+                sh '''
+                   PYTHONPATH=.
+                    cd UNIR-CP1.4/
+                    sam build --config-env staging
+                    sam validate --config-env staging
+                    sam deploy --config-env staging --no-fail-on-empty-changeset
+                '''
+            }
+        }
+         stage('Rest Test') {
+            steps {
+               
+                sh '''
+                   export DYNAMODB_TABLE=todo-table
+                   PYTHONPATH=.
+                   cd UNIR-CP1.4/
+                   export BASE_URL=$(aws cloudformation describe-stacks --stack-name todo-list-aws --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text)
+                   python3 -m pytest test/integration/todoApiTest.py 
+                 '''
+            }
+        }
+        stage('Promote') {
+    steps {
+        dir('UNIR-CP1.4') {
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-token',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                    )]) {
+        
+                        sh '''
+                            git config user.name "Jenkins - JavierCM"
+                            git config user.email "jenkins@local"
+        
+                            git checkout master
+                            git merge origin/develop --no-edit
+        
+                            git remote set-url origin \
+                            https://${GIT_USER}:${GIT_TOKEN}@github.com/JavierCM-92/UNIR-CP1.4.git
+        
+                            git push origin master
+                        '''
+                    }
+                }
+            }
+        }
+    }
+   
+}
