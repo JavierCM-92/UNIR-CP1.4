@@ -11,6 +11,9 @@ pipeline {
                 // Get some code from a GitHub repository
                 sh """
                    git clone -b develop  https://github.com/JavierCM-92/UNIR-CP1.4.git
+                   cd UNIR-CP1.4/
+                   wget -O samconfig.toml https://raw.githubusercontent.com/JavierCM-92/todo-list-aws-config/staging/samconfig.toml
+                   cat samconfig.toml
                  """
                
             }
