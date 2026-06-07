@@ -39,3 +39,7 @@ parameter_overrides = "Stage=\"production\""
 image_repositories = []
 resolve_s3 = true
 confirm_changeset = false
+
+
+[production.global.parameters]
+region = "us-east-1"
