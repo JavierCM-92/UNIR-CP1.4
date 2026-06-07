@@ -1,0 +1,46 @@
+pipeline {
+        agent any
+    stages {
+        stage('Clean') {
+            steps {
+                cleanWs()
+            }
+        }
+        stage('Get Code') {
+            steps {
+                // Get some code from a GitHub repository
+                sh """
+                   git clone -b master  https://github.com/JavierCM-92/UNIR-CP1.4.git
+                   cd UNIR-CP1.4/
+                   wget -O samconfig.toml https://raw.githubusercontent.com/JavierCM-92/todo-list-aws-config/production/samconfig.toml
+                   cat samconfig.toml
+                 """
+               
+            }
+        }
+         stage('Deploy') {
+            steps {
+                sh '''
+                   PYTHONPATH=.
+                    cd UNIR-CP1.4/
+                    sam build --config-env production
+                    sam validate --config-env production
+                    sam deploy --config-env production --no-fail-on-empty-changeset
+                '''
+            }
+        }
+         stage('Rest Test') {
+            steps {
+               
+                sh '''
+                   export DYNAMODB_TABLE=todo-table
+                   PYTHONPATH=.
+                   cd UNIR-CP1.4/
+                   export BASE_URL=$(aws cloudformation describe-stacks --stack-name todo-list-aws --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text)
+                   python3 -m pytest -m readonly test/integration/todoApiTest.py 
+                 '''
+            }
+        }
+    }
+   
+}
